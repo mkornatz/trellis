@@ -20,9 +20,6 @@ jobs:
   test:
 
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        ruby-version: ['3.4']
 
     steps:
     - uses: actions/checkout@v4
@@ -32,7 +29,7 @@ jobs:
     # uses: ruby/setup-ruby@v1
       uses: ruby/setup-ruby@003a5c4d8d6321bd302e38f6f0ec593f77f06600 # v1.319.0
       with:
-        ruby-version: ${{ matrix.ruby-version }}
+        # ruby-version omitted → setup-ruby reads .ruby-version (single source of truth)
         bundler-cache: true # runs 'bundle install' and caches installed gems automatically
     - name: Run tests
       run: bundle exec rake
