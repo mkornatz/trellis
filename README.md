@@ -103,3 +103,7 @@ Arc frontmatter: `title`, `status` (`active` | `waiting` | `paused` | `done` | `
 ## Development
 
 `rake` runs the tests. Each test points `TRELLIS_VAULT` at a temporary directory, so the real vault is never touched. `CLAUDE.md` documents the architecture and the design invariants that keep the two interfaces in sync.
+
+## License
+
+[MIT](LICENSE) © 2026 Matt Kornatz
