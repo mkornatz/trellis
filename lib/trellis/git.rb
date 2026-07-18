@@ -19,6 +19,10 @@ module Trellis
       run(root, "rev-parse", "--git-dir")
     end
 
+    def init(root)
+      run(root, "init", "-q")
+    end
+
     def run(root, *args)
       system("git", "-C", root, *args, out: File::NULL, err: File::NULL)
     end

@@ -15,7 +15,9 @@ module Trellis
       say "reindexed → #{c[:arcs]} arcs, #{c[:roots]} roots, #{c[:artifacts]} artifacts, #{c[:open_tasks]} open tasks, #{c[:edges]} edges"
     end
 
-    desc "init", "Create vault dirs, build the index, and wire pinned.md into ~/.claude/CLAUDE.md"
+    BIN_PATH = File.expand_path("../../bin/trellis", __dir__)
+
+    desc "init", "Create vault dirs, build the index, git-init the vault, and wire pinned.md into ~/.claude/CLAUDE.md"
     def init
       Config.node_dirs.each_value(&:mkpath)
       [Config.daily_dir, Config.inbox_dir].each(&:mkpath)
@@ -24,6 +26,30 @@ module Trellis
       wired = Store.ensure_pinned_import(create: true)
       say "vault ready at #{Config.vault} — #{c[:arcs]} arcs, #{c[:roots]} roots indexed"
       say(wired[:wired] ? "wired '#{Config.pinned_import_line}' into #{Config.claude_md}" : "pinned.md import already present in #{Config.claude_md}")
+
+      gitignore = Config.vault.join(".gitignore")
+      unless gitignore.exist? && gitignore.read.include?(".trellis/")
+        gitignore.write("#{gitignore.exist? ? "#{gitignore.read.chomp}\n" : ''}.trellis/\n")
+        say "added .trellis/ to #{gitignore}"
+      end
+
+      if Git.repo?(Config.vault.to_s)
+        say "vault already a git repo"
+      else
+        Git.init(Config.vault.to_s)
+        Git.commit("init: vault")
+        say "git-initialized vault at #{Config.vault}"
+      end
+
+      if File.exist?(BIN_PATH) && !File.executable?(BIN_PATH)
+        File.chmod(File.stat(BIN_PATH).mode | 0o111, BIN_PATH)
+        say "made #{BIN_PATH} executable"
+      end
+
+      say ""
+      say "To run `trellis` from anywhere, symlink it onto your PATH, e.g.:", :yellow
+      say "  ln -s #{BIN_PATH} ~/.local/bin/trellis"
+      say "(swap in /usr/local/bin, or wherever else is already on your PATH)"
     end
 
     desc "pin ENTITY [on|off]", "Pin an arc or root into pinned.md (always-loaded session context), or 'off' to unpin. Pin sparingly — pinned.md has a hard size budget."
