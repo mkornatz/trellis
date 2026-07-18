@@ -8,6 +8,8 @@ module Trellis
     class NotFound < StandardError; end
 
     def initialize(db_path = Config.db_path)
+      raise "vault not found at #{Config.vault} (check TRELLIS_VAULT, or mount it)" unless Config.vault.exist?
+
       path = Pathname.new(db_path)
       path.dirname.mkpath
       @db = SQLite3::Database.new(path.to_s)

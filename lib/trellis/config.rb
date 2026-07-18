@@ -22,7 +22,7 @@ module Trellis
     def pinned_path = vault.join("pinned.md")
     def pinned_budget = Integer(ENV.fetch("TRELLIS_PINNED_BUDGET", "100"))
     def claude_md = Pathname.new(ENV.fetch("TRELLIS_CLAUDE_MD", File.expand_path("~/.claude/CLAUDE.md")))
-    def pinned_import_line = "@#{ENV.fetch('TRELLIS_PINNED_IMPORT', '~/trellis/pinned.md')}"
+    def pinned_import_line = "@#{ENV.fetch('TRELLIS_PINNED_IMPORT', pinned_path.to_s)}"
 
     # Node-type dirs = the graph vocabulary. Arcs link to these; doctor checks they resolve.
     # Systems and people are no longer structural dirs — they're roots carrying a
