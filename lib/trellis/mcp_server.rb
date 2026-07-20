@@ -135,7 +135,10 @@ module Trellis
       rows.map do |r|
         ref = r[:type] == "artifact" ? "artifacts/#{r[:slug]}" : r[:slug]
         label = r[:kind].to_s.strip.empty? ? r[:type] : "#{r[:type]} · #{r[:kind]}"
-        "- #{ref} [#{label}] — #{r[:title]}"
+        line = "- #{ref} [#{label}] — #{r[:title]}"
+        snip = r[:snip].to_s.gsub(/\s+/, " ").strip
+        line += "\n    ↳ #{snip}" unless snip.empty?
+        line
       end.join("\n")
     end
 
@@ -188,7 +191,7 @@ module Trellis
 
     class Search < MCP::Tool
       tool_name "trellis_search"
-      description "Full-text search across arcs. Returns matching arc slugs + titles."
+      description "Full-text search across arcs + artifacts, ranked by relevance then recency. Returns each match's slug, title, and a snippet of the matching text. Excludes completed (done/dropped) arcs."
       input_schema(properties: { query: { type: "string" } }, required: ["query"])
       def self.call(query:, server_context: nil)
         MCPServer.guard(tool_name) { MCPServer.text(MCPServer.search_md(query)) }

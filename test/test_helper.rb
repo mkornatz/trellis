@@ -25,7 +25,8 @@ module VaultTest
   end
 
   # Write a minimal arc file. Omit priority to leave the frontmatter key out entirely.
-  def write_arc(slug, status: "active", updated: "2026-01-01", title: nil, priority: :unset, needs_review: :unset, tags: [], synopsis: :unset, flag_note: :unset)
+  # body: fills the ## Context section (feeds the FTS body column for search tests).
+  def write_arc(slug, status: "active", updated: "2026-01-01", title: nil, priority: :unset, needs_review: :unset, tags: [], synopsis: :unset, flag_note: :unset, body: "")
     fm = { "title" => (title || slug), "status" => status, "tags" => tags, "updated" => updated }
     fm["priority"] = priority unless priority == :unset
     fm["needs_review"] = needs_review unless needs_review == :unset
@@ -38,6 +39,8 @@ module VaultTest
       ---
 
       ## Context
+
+      #{body}
 
       ## Tasks
 

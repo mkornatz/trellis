@@ -7,6 +7,11 @@ module Trellis
     class Ambiguous < StandardError; end
     class NotFound < StandardError; end
 
+    # Bump when the FTS schema or tokenizer changes. FTS5 has no ALTER, and a plain
+    # reindex only DELETEs rows (the tokenizer survives) — so a change here forces a
+    # one-time DROP + rebuild, gated on PRAGMA user_version so it fires exactly once.
+    FTS_SCHEMA_VERSION = 2
+
     def initialize(db_path = Config.db_path)
       raise "vault not found at #{Config.vault} (check TRELLIS_VAULT, or mount it)" unless Config.vault.exist?
 
@@ -77,6 +82,13 @@ module Trellis
       end
       rebuilt = false
       begin
+        # Tokenizer/schema change: drop the FTS tables once so they recreate with the
+        # current definition. reindex_all below repopulates them from the vault.
+        if @db.get_first_value("PRAGMA user_version").to_i < FTS_SCHEMA_VERSION
+          %w[arcs_fts artifacts_fts].each { |t| @db.execute("DROP TABLE IF EXISTS #{t}") }
+          @db.execute("PRAGMA user_version = #{FTS_SCHEMA_VERSION}")
+          rebuilt = true
+        end
         rebuilt |= ensure_fts_table("arcs_fts")
         rebuilt |= ensure_fts_table("artifacts_fts")
       rescue SQLite3::SQLException
@@ -92,7 +104,8 @@ module Trellis
       cols = @db.execute("PRAGMA table_info(#{name})").map { |r| r["name"] }
       dropped = cols.any? && !cols.include?("tags")
       @db.execute("DROP TABLE #{name}") if dropped
-      @db.execute("CREATE VIRTUAL TABLE IF NOT EXISTS #{name} USING fts5(slug, title, body, tags)")
+      # porter stemming so plural/tense variants match (rebate ↔ rebates, source ↔ sourcing).
+      @db.execute("CREATE VIRTUAL TABLE IF NOT EXISTS #{name} USING fts5(slug, title, body, tags, tokenize='porter unicode61')")
       dropped
     end
 
@@ -264,16 +277,30 @@ module Trellis
       @db.execute("SELECT DISTINCT src FROM edges WHERE target = ? ORDER BY src", [target]).map { |r| r["src"] }
     end
 
-    # Returns [{type:, slug:, title:}] across arcs + artifacts.
+    # Returns [{type:, slug:, title:, snip:}] across arcs + artifacts.
+    # Ranking: bm25 relevance (bucketed) then recency, so near-equal matches surface the
+    # freshest first. Completed arcs (done/dropped) are excluded; roots (NULL status) stay.
     def search(query, limit: 20)
       return fallback_search(query, limit) unless @fts
       out = []
-      @db.execute("SELECT slug, title FROM arcs_fts WHERE arcs_fts MATCH ? LIMIT ?", [query, limit]).each do |r|
-        row = @db.execute("SELECT COALESCE(kind,'arc') AS kind, entity_kind FROM arcs WHERE slug = ?", [r["slug"]]).first || {}
-        out << { type: (row["kind"] == "root" ? "root" : "arc"), kind: row["entity_kind"], slug: r["slug"], title: r["title"] }
+      @db.execute(<<~SQL, [query, limit]).each do |r|
+        SELECT f.slug, f.title,
+               snippet(arcs_fts, 2, '', '', '…', 10) AS snip,
+               COALESCE(a.kind,'arc') AS kind, a.entity_kind
+        FROM arcs_fts f JOIN arcs a ON a.slug = f.slug
+        WHERE arcs_fts MATCH ?
+          AND (a.status IS NULL OR a.status NOT IN ('done','dropped'))
+        ORDER BY ROUND(bm25(arcs_fts), 1), a.updated DESC
+        LIMIT ?
+      SQL
+        out << { type: (r["kind"] == "root" ? "root" : "arc"), kind: r["entity_kind"], slug: r["slug"], title: r["title"], snip: r["snip"] }
       end
-      @db.execute("SELECT slug, title FROM artifacts_fts WHERE artifacts_fts MATCH ? LIMIT ?", [query, limit]).each do |r|
-        out << { type: "artifact", slug: r["slug"], title: r["title"] }
+      @db.execute(<<~SQL, [query, limit]).each do |r|
+        SELECT slug, title, snippet(artifacts_fts, 2, '', '', '…', 10) AS snip
+        FROM artifacts_fts WHERE artifacts_fts MATCH ?
+        ORDER BY bm25(artifacts_fts) LIMIT ?
+      SQL
+        out << { type: "artifact", slug: r["slug"], title: r["title"], snip: r["snip"] }
       end
       out
     rescue SQLite3::SQLException
@@ -282,8 +309,13 @@ module Trellis
 
     def fallback_search(query, limit)
       like = "%#{query}%"
-      @db.execute("SELECT slug, title, COALESCE(kind,'arc') AS kind, entity_kind FROM arcs WHERE title LIKE ? OR context LIKE ? LIMIT ?", [like, like, limit])
-        .map { |r| { type: (r["kind"] == "root" ? "root" : "arc"), kind: r["entity_kind"], slug: r["slug"], title: r["title"] } }
+      @db.execute(<<~SQL, [like, like, limit])
+        SELECT slug, title, COALESCE(kind,'arc') AS kind, entity_kind FROM arcs
+        WHERE (title LIKE ? OR context LIKE ?)
+          AND (status IS NULL OR status NOT IN ('done','dropped'))
+        LIMIT ?
+      SQL
+        .map { |r| { type: (r["kind"] == "root" ? "root" : "arc"), kind: r["entity_kind"], slug: r["slug"], title: r["title"], snip: nil } }
     end
 
     def counts

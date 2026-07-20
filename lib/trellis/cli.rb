@@ -314,7 +314,7 @@ module Trellis
       rel.each { |s| a = index.arc(s); say "  #{s}#{a ? "  — #{a['title']}" : ''}" }
     end
 
-    desc "search QUERY", "Full-text search across arcs + artifacts"
+    desc "search QUERY", "Full-text search across arcs + artifacts, ranked by relevance then recency (excludes done/dropped)"
     def search(*words)
       q = words.join(" ")
       rows = index.search(q)
@@ -330,6 +330,8 @@ module Trellis
               end
         label = r[:kind].to_s.strip.empty? ? r[:type] : "#{r[:type]} · #{r[:kind]}"
         say "  #{ref}  [#{label}] — #{r[:title]}"
+        snip = r[:snip].to_s.gsub(/\s+/, " ").strip
+        say "      ↳ #{snip}" unless snip.empty?
       end
     end
 

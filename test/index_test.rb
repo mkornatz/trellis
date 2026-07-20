@@ -96,6 +96,50 @@ class IndexSearchTest < Minitest::Test
     skip "FTS unavailable" unless index.fts?
     assert_equal %w[billing-work], index.search("snowflake").map { |r| r[:slug] }
   end
+
+  # Ranking: within near-equal relevance, the most-recently-updated arc wins.
+  def test_search_ranks_by_recency_within_relevance
+    write_arc("older", updated: "2026-01-01", body: "quarterly rebate reconciliation")
+    write_arc("newer", updated: "2026-06-01", body: "quarterly rebate reconciliation")
+    index.reindex_all
+    skip "FTS unavailable" unless index.fts?
+    assert_equal %w[newer older], index.search("rebate").map { |r| r[:slug] }
+  end
+
+  # Completed arcs drop out of search even when they match.
+  def test_search_excludes_done_and_dropped
+    write_arc("live",    status: "active",  body: "widget calibration")
+    write_arc("shipped", status: "done",    body: "widget calibration")
+    write_arc("killed",  status: "dropped", body: "widget calibration")
+    index.reindex_all
+    skip "FTS unavailable" unless index.fts?
+    assert_equal %w[live], index.search("widget").map { |r| r[:slug] }
+  end
+
+  # Roots (no lifecycle → NULL status) stay searchable; only done/dropped are excluded.
+  def test_search_keeps_roots
+    write_root("some-system", tags: ["kafka"])
+    index.reindex_all
+    skip "FTS unavailable" unless index.fts?
+    assert_equal %w[some-system], index.search("kafka").map { |r| r[:slug] }
+  end
+
+  # A body match returns a snippet of the matching text.
+  def test_search_returns_a_snippet
+    write_arc("a", body: "the settlement pipeline reconciles daily")
+    index.reindex_all
+    skip "FTS unavailable" unless index.fts?
+    snip = index.search("settlement").first[:snip].to_s
+    assert_includes snip, "settlement"
+  end
+
+  # porter stemming: a singular query matches a plural in the body.
+  def test_search_stems_plural_and_singular
+    write_arc("a", body: "processing solana rebates for etp customers")
+    index.reindex_all
+    skip "FTS unavailable" unless index.fts?
+    assert_equal %w[a], index.search("rebate").map { |r| r[:slug] }
+  end
 end
 
 # synopsis + flag_note are indexed columns populated from frontmatter at reindex time.
