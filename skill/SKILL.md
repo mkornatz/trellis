@@ -61,6 +61,14 @@ trellis init                        # one-time setup
 
 MCP equivalents: `trellis_overview, _list_arcs, _search, _arc, _root, _roots, _tasks, _related, _log, _capture, _append_log, _add_task, _compact, _new_arc, _new_root, _set_priority, _set_review, _pin`.
 
+## Searching
+
+`search` is lexical (bm25 + stemming) — it matches **words, not meaning**. It won't surface an arc that phrases the same idea differently (searching "authentication" misses one that only says "login flow"). So:
+
+- **Reformulate, don't single-shot.** A concept search → try 2–3 phrasings (synonyms + the underlying concept), not one query.
+- **Pair with `overview`.** Synopses are cheap and you judge relevance better than keyword rank — read them, don't trust the hit list alone.
+- **Thin results ≠ not there.** Before deciding an initiative is new (and creating a duplicate arc), widen the phrasing or skim `list`. At this vault size, reading every title costs nothing.
+
 ## Working loop
 
 1. **Brain-first.** Before researching/planning/answering about ongoing work, check trellis (`overview` → `search`/`arc`). Unfamiliar initiative → search before assuming it's new.
