@@ -105,6 +105,41 @@ module Trellis
       Arc.slug_for(path)
     end
 
+    # Consolidation ("sleep"): fold synthesized durable signal into ## Context and drop
+    # the now-consolidated raw log, keeping only the most recent date blocks. Git history
+    # retains the dropped raw, so no archive file is needed. The agent supplies the
+    # finished Context prose — the app synthesizes nothing (invariant 2). At least one of
+    # context / keep_log_blocks must be given. Bumps `updated`.
+    def compact(slug:, context: nil, keep_log_blocks: nil, kind: "arc")
+      raise ArgumentError, "compact needs context: and/or keep_log_blocks:" if context.nil? && keep_log_blocks.nil?
+      path = node_path(slug, kind: kind)
+      raw = path.read
+      raw = replace_section(raw, "Context", context) unless context.nil?
+      raw = trim_log_blocks(raw, keep: keep_log_blocks) unless keep_log_blocks.nil?
+      path.write(bump_updated(raw))
+      Arc.slug_for(path)
+    end
+
+    # Replace a "## <name>" section's body with text (header kept), leaving other
+    # sections untouched. Ruby's ^ is always line-anchored; /m only makes . span lines.
+    def replace_section(raw, name, text)
+      header = "## #{name}"
+      return raw unless raw =~ /^#{Regexp.escape(header)}\s*$/
+      raw.sub(/(^#{Regexp.escape(header)}\s*$\n)(.*?)(?=^## |\z)/m) { "#{$1}\n#{text.to_s.strip}\n\n" }
+    end
+
+    # Keep only the newest `keep` "### <date>" blocks in ## Log (append_log prepends,
+    # so blocks are newest-first). The dropped blocks live on in git history.
+    def trim_log_blocks(raw, keep:)
+      n = [keep.to_i, 0].max
+      raw.sub(/(^## Log\s*$\n)(.*?)(?=^## |\z)/m) do
+        header, body = $1, $2
+        blocks = body.split(/^(?=###\s)/).reject { |b| b.strip.empty? }
+        kept = blocks.first(n).join.strip
+        "#{header}\n#{kept.empty? ? '' : "#{kept}\n"}"
+      end
+    end
+
     # Append a new open task under ## Tasks.
     def add_task(slug:, text:)
       path = arc_path(slug)

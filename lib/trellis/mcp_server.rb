@@ -51,6 +51,7 @@ module Trellis
       end
       if (log = file.latest_log)
         out << "\n## Recent log — #{log[:date]}\n#{log[:entries]}\n"
+        out << "_…log block truncated — full history via trellis_log._\n" if log[:truncated]
       end
       srcs = idx.sources_for(slug)
       out << "\n## Sources\n" + srcs.map { |s| "- #{s['kind']}: #{s['ref']}" }.join("\n") + "\n" unless srcs.empty?
@@ -75,6 +76,7 @@ module Trellis
       out << "\n## Context\n#{a['context']}\n" unless a["context"].to_s.strip.empty?
       if (log = file.latest_log)
         out << "\n## Recent log — #{log[:date]}\n#{log[:entries]}\n"
+        out << "_…log block truncated — full history via trellis_log._\n" if log[:truncated]
       end
       links = file.links
       out << "\n## Links\n" + links.map { |l| "- #{l[:target]}" }.join("\n") + "\n" unless links.empty?
@@ -149,6 +151,18 @@ module Trellis
         k = r["entity_kind"].to_s.strip
         "- #{r['slug']}#{k.empty? ? '' : " [#{k}]"} — #{r['title']}"
       end.join("\n")
+    end
+
+    # Full ## Log history (all date blocks) for an arc or root. trellis_arc caps the
+    # log to its newest block; this is the complete record (e.g. before consolidating).
+    def log_md(query)
+      slug = idx.resolve_slug(query)
+      a = idx.arc(slug)
+      log = Arc.new(a["path"]).full_log
+      return "no log for #{slug}" if log.empty?
+      "# #{a['title']} — full log\n\n#{log}\n"
+    rescue Index::NotFound, Index::Ambiguous => e
+      "error: #{e.message}"
     end
 
     # ---- tools ------------------------------------------------------------
@@ -241,6 +255,28 @@ module Trellis
           MCPServer.reindex(s)
           Git.commit("log(#{s}): #{Git.summarize(text)}")
           MCPServer.text("appended to #{s}")
+        end
+      end
+    end
+
+    class GetLog < MCP::Tool
+      tool_name "trellis_log"
+      description "Full ## Log history for an arc or root (every date block). trellis_arc returns only the capped latest block — use this for the complete log, e.g. to synthesize before consolidating."
+      input_schema(properties: { slug: { type: "string" } }, required: ["slug"])
+      def self.call(slug:, server_context: nil) = MCPServer.text(MCPServer.log_md(slug))
+    end
+
+    class Compact < MCP::Tool
+      tool_name "trellis_compact"
+      description "Consolidate an arc (the 'sleep' pass): replace ## Context with synthesized durable prose and/or drop old log blocks. keep_log_blocks = how many recent date blocks to retain (git keeps the dropped raw). Supply the FULL new Context, not a fragment — it replaces the section. Read trellis_log first to synthesize from the whole history. At least one of context / keep_log_blocks required."
+      input_schema(properties: { slug: { type: "string" }, context: { type: "string" }, keep_log_blocks: { type: "integer" } }, required: ["slug"])
+      def self.call(slug:, context: nil, keep_log_blocks: nil, server_context: nil)
+        MCPServer.guard(tool_name) do
+          s = MCPServer.idx.resolve_slug(slug)
+          Store.compact(slug: s, context: context, keep_log_blocks: keep_log_blocks)
+          MCPServer.reindex(s)
+          Git.commit("compact(#{s})")
+          MCPServer.text("compacted #{s}")
         end
       end
     end
@@ -361,7 +397,7 @@ module Trellis
       end
     end
 
-    TOOLS = [ListArcs, Overview, GetArc, GetRoot, Roots, Tasks, Search, Related, Capture, AppendLog, AddTask, NewArc, NewRoot, SetPriority, SetReview, SetPinned].freeze
+    TOOLS = [ListArcs, Overview, GetArc, GetRoot, Roots, Tasks, Search, Related, GetLog, Capture, AppendLog, AddTask, Compact, NewArc, NewRoot, SetPriority, SetReview, SetPinned].freeze
 
     def run
       server = MCP::Server.new(name: "trellis", version: Trellis::VERSION, tools: TOOLS)

@@ -121,6 +121,28 @@ module Trellis
       say "added task to #{slug}"
     end
 
+    desc "log SLUG", "Print the full ## Log history for an arc or root (all date blocks)"
+    def log(query)
+      slug = resolve!(query, kind: nil)
+      full = Arc.new(index.arc(slug)["path"]).full_log
+      say full.empty? ? "no log for #{slug}" : full
+    end
+
+    desc "compact ARC", "Consolidate: replace ## Context with new prose from STDIN and/or drop old log blocks (--keep N). Git keeps the dropped raw."
+    method_option :keep, type: :numeric, desc: "Keep only the newest N log date blocks"
+    def compact(arc)
+      slug = resolve!(arc)
+      ctx = $stdin.stat.pipe? ? $stdin.read : nil
+      ctx = nil if ctx && ctx.strip.empty?
+      abort "pipe new Context via STDIN and/or pass --keep N" if ctx.nil? && options[:keep].nil?
+      Store.compact(slug: slug, context: ctx, keep_log_blocks: options[:keep])
+      index.index_arc(Arc.new(Store.arc_path(slug)))
+      Git.commit("compact(#{slug})")
+      say "compacted #{slug}"
+    rescue ArgumentError => e
+      abort e.message
+    end
+
     desc "priority ARC [on|off]", "Flag an arc as a priority (focus), or 'off' to unflag. Default: on."
     def priority(arc, state = "on")
       slug = resolve!(arc)
@@ -222,6 +244,7 @@ module Trellis
       if log
         say "\nRecent log — #{log[:date]}", :yellow
         log[:entries].each_line { |l| say "  #{l.chomp}" }
+        say "  …log block truncated — full history via `trellis log #{slug}`", :white if log[:truncated]
       end
 
       srcs = index.sources_for(slug)
@@ -262,6 +285,7 @@ module Trellis
       if log
         say "\nRecent log — #{log[:date]}", :yellow
         log[:entries].each_line { |l| say "  #{l.chomp}" }
+        say "  …log block truncated — full history via `trellis log #{slug}`", :white if log[:truncated]
       end
 
       links = file.links
@@ -412,7 +436,7 @@ module Trellis
     def resolve!(query, kind: "arc")
       index.resolve_slug(query, kind: kind)
     rescue Index::NotFound
-      abort "no #{kind} matches #{query.inspect}"
+      abort "no #{kind || 'node'} matches #{query.inspect}"
     rescue Index::Ambiguous => e
       abort "ambiguous: #{e.message}"
     end

@@ -124,3 +124,69 @@ class StoreTest < Minitest::Test
     assert_equal "2026-01-01", frontmatter("a")["updated"].to_s
   end
 end
+
+# compact (the "sleep" pass): fold synthesized Context in and/or drop old log blocks;
+# git keeps the dropped raw. Store just splices Markdown — the agent supplies the prose. (W2)
+class StoreCompactTest < Minitest::Test
+  include VaultTest
+
+  def arc(slug) = Trellis::Arc.new(Trellis::Store.arc_path(slug))
+  def read(slug) = Trellis::Config.arcs_dir.join("#{slug}.md").read
+  def frontmatter(slug) = YAML.safe_load(read(slug).split(/^---\s*$\n/, 3)[1], permitted_classes: [Date, Time])
+
+  def test_replaces_context
+    write_arc("a", body: "stale context")
+    Trellis::Store.compact(slug: "a", context: "the durable brief")
+    assert_equal "the durable brief", arc("a").context
+    refute_includes read("a"), "stale context"
+  end
+
+  def test_trims_to_newest_log_blocks
+    write_arc("a")
+    %w[2026-01-01 2026-02-01 2026-03-01].each_with_index do |d, i|
+      Trellis::Store.append_log(slug: "a", text: %w[jan feb mar][i], date: d)
+    end
+    Trellis::Store.compact(slug: "a", keep_log_blocks: 1)
+    full = arc("a").full_log
+    assert_includes full, "mar", "newest block kept"
+    refute_includes full, "feb"
+    refute_includes full, "jan", "older blocks dropped"
+  end
+
+  def test_keep_zero_empties_the_log
+    write_arc("a")
+    Trellis::Store.append_log(slug: "a", text: "x", date: "2026-01-01")
+    Trellis::Store.compact(slug: "a", keep_log_blocks: 0)
+    assert_equal "", arc("a").full_log
+  end
+
+  def test_does_both_context_and_log
+    write_arc("a", body: "old")
+    Trellis::Store.append_log(slug: "a", text: "j", date: "2026-01-01")
+    Trellis::Store.append_log(slug: "a", text: "f", date: "2026-02-01")
+    Trellis::Store.compact(slug: "a", context: "new brief", keep_log_blocks: 1)
+    assert_equal "new brief", arc("a").context
+    assert_includes arc("a").full_log, "f"
+    refute_includes arc("a").full_log, "j"
+  end
+
+  def test_preserves_the_tasks_section
+    write_arc("a", body: "ctx")
+    Trellis::Store.add_task(slug: "a", text: "do thing")
+    Trellis::Store.compact(slug: "a", context: "new ctx")
+    raw = read("a")
+    assert_includes raw, "## Tasks"
+    assert_includes raw, "do thing", "compact must not eat neighboring sections"
+  end
+
+  def test_requires_at_least_one_action
+    write_arc("a")
+    assert_raises(ArgumentError) { Trellis::Store.compact(slug: "a") }
+  end
+
+  def test_bumps_updated
+    write_arc("a", updated: "2020-01-01", body: "x")
+    Trellis::Store.compact(slug: "a", context: "y")
+    refute_equal "2020-01-01", frontmatter("a")["updated"].to_s
+  end
+end

@@ -118,15 +118,35 @@ module Trellis
 
     def open_tasks = tasks.reject { |t| t[:done] }
 
-    # Most recent "### <date>" block in ## Log, as an array of entry lines.
-    def latest_log
+    # Rehydration returns only the newest log block, capped to this many bytes so a
+    # single verbose session can't bloat every fetch. Full history → #full_log.
+    LOG_BLOCK_BUDGET = 1500
+
+    # Most recent "### <date>" block in ## Log. Entries are newest-first (append_log
+    # prepends), so capping to the budget keeps the freshest and drops the tail.
+    # Returns { date:, entries:, truncated: } — truncated flags that older same-block
+    # entries were dropped. max_bytes: nil returns the whole block.
+    def latest_log(max_bytes: LOG_BLOCK_BUDGET)
       log = section_text("Log")
       blocks = log.split(/^###\s+/).reject { |b| b.strip.empty? }
       return nil if blocks.empty?
-      first = blocks.first
-      date, *rest = first.lines
-      { date: date.to_s.strip, entries: rest.join.strip }
+      date, *rest = blocks.first.lines
+      kept = []
+      size = 0
+      truncated = false
+      rest.each do |line|
+        if max_bytes && !kept.empty? && size + line.bytesize > max_bytes
+          truncated = true
+          break
+        end
+        kept << line
+        size += line.bytesize
+      end
+      { date: date.to_s.strip, entries: kept.join.strip, truncated: truncated }
     end
+
+    # The whole ## Log section (all date blocks), for consolidation and full reads.
+    def full_log = section_text("Log").strip
 
     def section_text(name) = @sections[name] || ""
 

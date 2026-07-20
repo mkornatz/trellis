@@ -44,10 +44,12 @@ trellis root <slug|prefix>          # rehydrate root (no tasks)
 trellis roots [--kind system|…]     # list roots, optional kind filter
 trellis tasks [--waiting|--due|--arc X|--all]   # open tasks; default = active arcs only
 trellis related <slug>              # graph neighbors
+trellis log <slug>                  # full ## Log history (all date blocks); trellis arc caps to the latest
 trellis new "<title>" --area <x> [--tags a,b]   # create arc
 trellis new "<title>" --kind roots [--area <x>] # create root
 trellis capture "<note>" --arc <slug>   # append to arc log (--root for root; omit both → inbox); always logs daily
 trellis add-task <slug> "<text> @due(2026-07-15) @waiting(who)"
+trellis compact <slug> [--keep N]   # consolidate: new ## Context via STDIN and/or drop old log blocks
 trellis priority <slug> [on|off]
 trellis review [<slug> [on|off]]    # no arg: decision inbox
 trellis pin <slug> [on|off]         # pin SPARINGLY
@@ -57,7 +59,7 @@ trellis reindex                     # rebuild index after a direct file edit
 trellis init                        # one-time setup
 ```
 
-MCP equivalents: `trellis_overview, _list_arcs, _search, _arc, _root, _roots, _tasks, _related, _capture, _append_log, _add_task, _new_arc, _new_root, _set_priority, _set_review, _pin`.
+MCP equivalents: `trellis_overview, _list_arcs, _search, _arc, _root, _roots, _tasks, _related, _log, _capture, _append_log, _add_task, _compact, _new_arc, _new_root, _set_priority, _set_review, _pin`.
 
 ## Working loop
 
@@ -76,9 +78,11 @@ MCP equivalents: `trellis_overview, _list_arcs, _search, _arc, _root, _roots, _t
 
 ## Direct edits & pruning
 
-No verb sets `## Context` — edit `~/trellis/arcs/<slug>.md` (or `roots/…`) directly by absolute path, then **`trellis reindex`**. Append ops (log/tasks) reindex automatically.
+No verb sets `## Context` for a small tweak — edit `~/trellis/arcs/<slug>.md` (or `roots/…`) directly by absolute path, then **`trellis reindex`**. Append ops (log/tasks) reindex automatically.
 
-Pruning is **your** job (the app never rewrites) — keep arcs dense and accurate as they age, not smaller for its own sake: rewrite a drifted `## Context`, collapse near-duplicate/superseded log lines, drop long-done tasks, then `reindex`. Every write commits, so an over-cut is one `git revert` away — prune boldly when an arc *feels* heavy, not on a schedule.
+Pruning is **your** job (the app never rewrites) — keep arcs dense and accurate as they age, not smaller for its own sake: rewrite a drifted `## Context`, collapse near-duplicate/superseded log lines, drop long-done tasks. Every write commits, so an over-cut is one `git revert` away — prune boldly when an arc *feels* heavy, not on a schedule.
+
+For the heavy case — an arc whose `## Log` has outgrown its `## Context` — use **consolidation** (`trellis_compact`) rather than hand-editing: fold the durable signal up into Context and drop the consolidated raw log in one committed step. Procedure → **`consolidate.md`**.
 
 ## Artifacts
 
