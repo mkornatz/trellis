@@ -246,13 +246,14 @@ module Trellis
 
     class AppendLog < MCP::Tool
       tool_name "trellis_append_log"
-      description "Append a synthesized findings entry to an arc's log under today's date. Use to write back what you discovered while working an arc."
+      description "Append a synthesized findings entry to an arc's or root's log under today's date. Use to write back what you discovered while working the node."
       input_schema(properties: { slug: { type: "string" }, text: { type: "string" } }, required: ["slug", "text"])
       def self.call(slug:, text:, server_context: nil)
         MCPServer.guard(tool_name) do
           s = MCPServer.idx.resolve_slug(slug)
-          Store.append_log(slug: s, text: text)
-          MCPServer.reindex(s)
+          kind = MCPServer.idx.arc(s)["kind"] == "root" ? "root" : "arc"
+          Store.append_log(slug: s, text: text, kind: kind)
+          MCPServer.reindex_node(s, kind: kind)
           Git.commit("log(#{s}): #{Git.summarize(text)}")
           MCPServer.text("appended to #{s}")
         end
