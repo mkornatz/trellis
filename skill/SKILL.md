@@ -13,7 +13,7 @@ Markdown vault (`~/trellis/`, override `TRELLIS_VAULT`) is the source of truth; 
 
 **Arc** — a line of work that *starts and finishes* (`billing-v2`, `search-rebuild`): moves through a status, then completes. Sections: `## Context` (dense gist, rewritten as reality shifts), `## Tasks` (checkboxes), `## Log` (append-only synthesized entries, newest first), plus `[[links]]`. Frontmatter: `title, status, tags, sources, created, updated, priority, needs_review, synopsis, flag_note, pinned`.
 
-**Root** — durable reference that *accumulates but never finishes* (finances, prefs, vendors, a system's history). **People, systems, principles are roots.** Has `## Context` + optional `## Log` — no tasks, no status/priority/review. Frontmatter subset: `title, kind, tags, created, updated, synopsis, pinned`. Classify with the `kind` facet (`system|person|principle|…`, coin freely) — a facet, not a folder; filter via `trellis roots [--kind <k>]`.
+**Root** — durable reference that *accumulates but never finishes* (finances, prefs, vendors, a system's history). **People, systems, principles are roots.** Has `## Context` only — no log (see "Where signal goes"), no tasks, no status/priority/review. Frontmatter subset: `title, kind, tags, created, updated, synopsis, pinned`. Classify with the `kind` facet (`system|person|principle|…`, coin freely) — a facet, not a folder; filter via `trellis roots [--kind <k>]`.
 
 **Which?** Finishes / has progressing tasks → arc. Reference you return to, no start or end → root. Unsure → arc (can be marked `done`); never file durable reference as an arc that hangs open forever.
 
@@ -47,14 +47,14 @@ trellis related <slug>              # graph neighbors
 trellis log <slug>                  # full ## Log history (all date blocks); trellis arc caps to the latest
 trellis new "<title>" --area <x> [--tags a,b]   # create arc
 trellis new "<title>" --kind roots [--area <x>] # create root
-trellis capture "<note>" --arc <slug>   # append to arc log (--root for root; omit both → inbox); always logs daily
+trellis capture "<note>" --arc <slug>   # append to arc log (omit --arc → inbox); always logs daily. Roots take no log — edit theirs in place
 trellis add-task <slug> "<text> @due(2026-07-15) @waiting(who)"
 trellis compact <slug> [--keep N]   # consolidate: new ## Context via STDIN and/or drop old log blocks
 trellis priority <slug> [on|off]
 trellis review [<slug> [on|off]]    # no arg: decision inbox
 trellis pin <slug> [on|off]         # pin SPARINGLY
 trellis artifacts                   # long-form docs + backlinks
-trellis doctor                      # drift check (dangling links, frontmatter errors)
+trellis doctor                      # drift check (dangling links, frontmatter errors, roots carrying a log)
 trellis reindex                     # rebuild index after a direct file edit
 trellis init                        # one-time setup
 ```
@@ -74,7 +74,7 @@ MCP equivalents: `trellis_overview, _list_arcs, _search, _arc, _root, _roots, _t
 1. **Brain-first.** Before researching/planning/answering about ongoing work, check trellis (`overview` → `search`/`arc`). Unfamiliar initiative → search before assuming it's new.
 2. **Rehydrate** the arc/root before picking up a thread.
 3. **Synthesize, never dump.** Trellis does no fetching and no LLM. *You* fetch signals with your own tools and write a clean 2–5 bullet capsule (what happened / why it matters / what changed). Never paste raw content.
-4. **Capture back** to the arc log after working it — one capsule per signal, terse, sourced.
+4. **Write back where it belongs** — "Where signal goes" below. Corrections edit the rule; only dated decisions get logged.
 5. **Prune when heavy** (below).
 
 ## Conventions
@@ -83,6 +83,15 @@ MCP equivalents: `trellis_overview, _list_arcs, _search, _arc, _root, _roots, _t
 - **Tasks:** `- [ ] text` + optional `@due(YYYY-MM-DD)`, `@waiting(who)`, `@blocked`, `@paused`; `- [x]` = done.
 - **`kind`:** MCP → pass `kind:` to `trellis_new_root`. CLI → `trellis new … --kind roots`, set `kind:` in frontmatter, `reindex`.
 - **`synopsis`** = one-line gist (distinct from title); **`flag_note`** = why `needs_review` is set. Set by editing frontmatter + `reindex`; neither bumps `updated`.
+
+## Where signal goes
+
+Two kinds of signal, two destinations. Getting this wrong is how one rule ends up written five times.
+
+- **A correction or refinement to a standing rule → edit the rule in place.** Never append a log entry that restates it. Appending feels safer than editing the user's policy, but it buries the current rule under history, so the next agent misses it, re-derives it, and logs it again.
+- **A dated decision, finding, or change of direction on live work → the arc log.** One capsule, terse, sourced.
+- **Roots have no log.** A root states what is true *now*. Edit `## Context` in place; git holds the history (`git -C ~/trellis log -p roots/<slug>.md`). A log on a root is a slower way of letting its Context go stale. The tools enforce it: `trellis_append_log` / `trellis capture` refuse a root slug.
+- **Never the same fact in two places.** If it's in a rule and in a log, one of them is already wrong.
 
 ## Direct edits & pruning
 

@@ -89,26 +89,26 @@ module Trellis
       end
     end
 
-    desc "capture TEXT", "Capture a note into an arc's log, a root's log, or the inbox"
+    desc "capture TEXT", "Capture a note into an arc's log or the inbox (roots take no log — edit their ## Context)"
     method_option :arc, aliases: "-c", desc: "Arc slug (or prefix) to route to"
-    method_option :root, aliases: "-r", desc: "Root slug (or prefix) to route to"
+    # Kept only to catch the old muscle memory: Thor would otherwise swallow --root
+    # and route the note to the inbox, which looks like it worked.
+    method_option :root, aliases: "-r", hide: true
     def capture(*words)
       text = words.join(" ")
       abort "text required" if text.empty?
-      abort "pass --arc or --root, not both" if options[:arc] && options[:root]
-      if options[:root]
-        slug = resolve!(options[:root], kind: "root")
-        result = Store.capture(text, root: slug)
-        index.index_arc(Arc.new(Store.node_path(slug, kind: "root")))
-      elsif options[:arc]
+      abort Store::NO_ROOT_LOG if options[:root]
+      if options[:arc]
         slug = resolve!(options[:arc], kind: "arc")
         result = Store.capture(text, arc: slug)
-        index.index_arc(Arc.new(Store.node_path(slug, kind: "arc")))
+        index.index_arc(Arc.new(Store.arc_path(slug)))
       else
         result = Store.capture(text)
       end
       Git.commit("capture(#{result[:routed]}): #{Git.summarize(text)}")
       say "captured → #{result[:routed]}"
+    rescue RuntimeError => e
+      abort e.message
     end
 
     desc "add-task ARC TEXT", "Add an open task to an arc"
@@ -121,10 +121,12 @@ module Trellis
       say "added task to #{slug}"
     end
 
-    desc "log SLUG", "Print the full ## Log history for an arc or root (all date blocks)"
+    desc "log SLUG", "Print the full ## Log history for an arc (all date blocks)"
     def log(query)
       slug = resolve!(query, kind: nil)
-      full = Arc.new(index.arc(slug)["path"]).full_log
+      node = index.arc(slug)
+      abort Store::NO_ROOT_LOG if node["kind"] == "root"
+      full = Arc.new(node["path"]).full_log
       say full.empty? ? "no log for #{slug}" : full
     end
 
@@ -260,12 +262,11 @@ module Trellis
       say ""
     end
 
-    desc "root SLUG", "Rehydrate a root: context, recent log, links, backlinks (reference node, no tasks)"
+    desc "root SLUG", "Rehydrate a root: context, links, backlinks (reference node — no tasks, no log)"
     def root_node(query)
       slug = resolve!(query, kind: "root")
       a = index.arc(slug)
       file = Arc.new(a["path"])
-      log = file.latest_log
 
       k = a["entity_kind"].to_s.strip
       say ""
@@ -280,12 +281,6 @@ module Trellis
       unless a["context"].to_s.strip.empty?
         say "\nContext", :yellow
         a["context"].each_line { |l| say "  #{l.chomp}" }
-      end
-
-      if log
-        say "\nRecent log — #{log[:date]}", :yellow
-        log[:entries].each_line { |l| say "  #{l.chomp}" }
-        say "  …log block truncated — full history via `trellis log #{slug}`", :white if log[:truncated]
       end
 
       links = file.links
@@ -375,7 +370,7 @@ module Trellis
       end
     end
 
-    desc "doctor", "Check for drift between the vault and the index"
+    desc "doctor", "Check for drift: vault↔index, dangling links, frontmatter errors, roots carrying a log"
     def doctor
       issues = []
       disk = Config.arcs_dir.glob("*.md").map { |f| f.basename(".md").to_s }.sort
@@ -393,6 +388,9 @@ module Trellis
       (Config.arcs_dir.glob("*.md") + (Config.roots_dir.exist? ? Config.roots_dir.glob("**/*.md") : [])).each do |f|
         a = Arc.new(f)
         issues << ["frontmatter-error", a.slug] if a.frontmatter["_frontmatter_error"]
+        # Nothing writes a log to a root anymore, so a ## Log there is a hand-edit or a
+        # legacy file: fold it into ## Context and delete the section.
+        issues << ["root-has-log", "roots/#{a.slug}"] if a.node_kind == "root" && a.sections.key?("Log")
       end
 
       index.all_edges.each do |e|

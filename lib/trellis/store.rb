@@ -62,20 +62,14 @@ module Trellis
 
         ## Context
 
-
-        ## Log
       MD
       path
     end
 
-    # Capture: route to an arc's log, a root's log, or the inbox. Always logs to daily.
-    def capture(text, arc: nil, root: nil)
+    # Capture: route to an arc's log or the inbox. Always logs to daily.
+    def capture(text, arc: nil)
       if arc
         slug = append_log(slug: arc, text: text)
-        daily_line("#{slug}: #{text}")
-        { routed: slug }
-      elsif root
-        slug = append_log(slug: root, text: text, kind: "root")
         daily_line("#{slug}: #{text}")
         { routed: slug }
       else
@@ -85,9 +79,14 @@ module Trellis
       end
     end
 
+    NO_ROOT_LOG = "roots have no log — a root states what is true now: edit its ## Context in place " \
+                  "(git holds the history). Log dated work on the arc instead."
+
     # Append a line under today's date block in ## Log (creating the block if needed).
-    def append_log(slug:, text:, date: Date.today.to_s, kind: "arc")
-      path = node_path(slug, kind: kind)
+    # Arcs only: a log is lifecycle, and roots have none.
+    def append_log(slug:, text:, date: Date.today.to_s)
+      raise NO_ROOT_LOG if root?(slug)
+      path = arc_path(slug)
       raw = path.read
       header = "### #{date}"
       entry  = "- #{text}\n"
@@ -350,5 +349,15 @@ module Trellis
     end
 
     def arc_path(slug) = node_path(slug, kind: "arc")
+
+    # Does this slug (or prefix) name a root? Filesystem-only, same lookup as node_path
+    # — so a write refused here is refused for both interfaces. An arc match wins, so a
+    # prefix shared with some root still logs to the arc.
+    def root?(slug)
+      return false unless Config.roots_dir.exist?
+      return true if Config.roots_dir.join("#{slug}.md").exist?
+      return false if Config.arcs_dir.glob("#{slug}*.md").any?
+      Config.roots_dir.glob("**/#{slug}*.md").any?
+    end
   end
 end

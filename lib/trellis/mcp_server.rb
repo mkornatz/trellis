@@ -74,10 +74,6 @@ module Trellis
       out << "tags: #{tags.join(', ')}\n" unless tags.empty?
       out << "updated: #{a['updated']}\n"
       out << "\n## Context\n#{a['context']}\n" unless a["context"].to_s.strip.empty?
-      if (log = file.latest_log)
-        out << "\n## Recent log — #{log[:date]}\n#{log[:entries]}\n"
-        out << "_…log block truncated — full history via trellis_log._\n" if log[:truncated]
-      end
       links = file.links
       out << "\n## Links\n" + links.map { |l| "- #{l[:target]}" }.join("\n") + "\n" unless links.empty?
       back = (idx.backlinks("roots/#{slug}") + idx.backlinks(slug)).uniq
@@ -153,11 +149,12 @@ module Trellis
       end.join("\n")
     end
 
-    # Full ## Log history (all date blocks) for an arc or root. trellis_arc caps the
+    # Full ## Log history (all date blocks) for an arc. trellis_arc caps the
     # log to its newest block; this is the complete record (e.g. before consolidating).
     def log_md(query)
       slug = idx.resolve_slug(query)
       a = idx.arc(slug)
+      return "error: #{Store::NO_ROOT_LOG}" if a["kind"] == "root"
       log = Arc.new(a["path"]).full_log
       return "no log for #{slug}" if log.empty?
       "# #{a['title']} — full log\n\n#{log}\n"
@@ -223,15 +220,14 @@ module Trellis
 
     class Capture < MCP::Tool
       tool_name "trellis_capture"
-      description "Capture a note. If arc (slug/prefix) is given, appends to that arc's log; if root is given, appends to that root's log; else drops in the inbox. Always logs to the daily file. Pass already-synthesized content."
-      input_schema(properties: { text: { type: "string" }, arc: { type: "string" }, root: { type: "string" } }, required: ["text"])
+      description "Capture a note. If arc (slug/prefix) is given, appends to that arc's log; else drops in the inbox. Always logs to the daily file. Pass already-synthesized content. Roots take no log — to update a root, edit its ## Context in place."
+      input_schema(properties: { text: { type: "string" }, arc: { type: "string" } }, required: ["text"])
+      # root: is off the schema but still accepted, so an agent working from the old
+      # shape gets the reason instead of an argument error.
       def self.call(text:, arc: nil, root: nil, server_context: nil)
         MCPServer.guard(tool_name) do
-          if root
-            slug = MCPServer.idx.resolve_slug(root, kind: "root")
-            result = Store.capture(text, root: slug)
-            MCPServer.reindex_node(slug, kind: "root")
-          elsif arc
+          raise Store::NO_ROOT_LOG if root
+          if arc
             slug = MCPServer.idx.resolve_slug(arc, kind: "arc")
             result = Store.capture(text, arc: slug)
             MCPServer.reindex_node(slug, kind: "arc")
@@ -246,14 +242,13 @@ module Trellis
 
     class AppendLog < MCP::Tool
       tool_name "trellis_append_log"
-      description "Append a synthesized findings entry to an arc's or root's log under today's date. Use to write back what you discovered while working the node."
+      description "Append a synthesized findings entry to an ARC's log under today's date. Use to write back what you discovered while working the arc. Roots have no log — a root states what is true now, so update one by editing its ## Context in place (git holds the history)."
       input_schema(properties: { slug: { type: "string" }, text: { type: "string" } }, required: ["slug", "text"])
       def self.call(slug:, text:, server_context: nil)
         MCPServer.guard(tool_name) do
           s = MCPServer.idx.resolve_slug(slug)
-          kind = MCPServer.idx.arc(s)["kind"] == "root" ? "root" : "arc"
-          Store.append_log(slug: s, text: text, kind: kind)
-          MCPServer.reindex_node(s, kind: kind)
+          Store.append_log(slug: s, text: text)
+          MCPServer.reindex(s)
           Git.commit("log(#{s}): #{Git.summarize(text)}")
           MCPServer.text("appended to #{s}")
         end
@@ -262,7 +257,7 @@ module Trellis
 
     class GetLog < MCP::Tool
       tool_name "trellis_log"
-      description "Full ## Log history for an arc or root (every date block). trellis_arc returns only the capped latest block — use this for the complete log, e.g. to synthesize before consolidating."
+      description "Full ## Log history for an arc (every date block). trellis_arc returns only the capped latest block — use this for the complete log, e.g. to synthesize before consolidating. Arcs only: roots have no log, and their history is in git."
       input_schema(properties: { slug: { type: "string" } }, required: ["slug"])
       def self.call(slug:, server_context: nil) = MCPServer.text(MCPServer.log_md(slug))
     end
@@ -329,7 +324,7 @@ module Trellis
 
     class GetRoot < MCP::Tool
       tool_name "trellis_root"
-      description "Rehydrate a root (durable reference node) by slug or unique prefix: context, recent log, links, backlinks. Roots accumulate reference material and have no tasks or lifecycle status."
+      description "Rehydrate a root (durable reference node) by slug or unique prefix: context, links, backlinks. Roots accumulate reference material and have no tasks, no lifecycle status, and no log — a root states what is true now, and is updated by editing its ## Context in place."
       input_schema(properties: { slug: { type: "string" } }, required: ["slug"])
       def self.call(slug:, server_context: nil)
         MCPServer.guard(tool_name) { MCPServer.text(MCPServer.root_md(slug)) }
@@ -338,7 +333,7 @@ module Trellis
 
     class NewRoot < MCP::Tool
       tool_name "trellis_new_root"
-      description "Create a root: a durable, non-lifecycle reference node (no status, no tasks) for context that accumulates over time (people, systems, finances, preferences, etc.). area becomes an organizing subfolder. kind is an optional user-driven facet (system|person|principle|…) for classifying and later filtering the node."
+      description "Create a root: a durable, non-lifecycle reference node (no status, no tasks, no log — edited in place) for context that accumulates over time (people, systems, finances, preferences, etc.). area becomes an organizing subfolder. kind is an optional user-driven facet (system|person|principle|…) for classifying and later filtering the node."
       input_schema(
         properties: { title: { type: "string" }, area: { type: "string" }, tags: { type: "array", items: { type: "string" } }, kind: { type: "string" } },
         required: ["title"]

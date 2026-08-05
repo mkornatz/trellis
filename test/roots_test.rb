@@ -112,16 +112,43 @@ class RootsStoreTest < Minitest::Test
     refute_includes path.read, "status:"
   end
 
+  def test_new_root_template_has_no_log
+    path = Trellis::Store.new_root(title: "Car maintenance")
+    refute_includes path.read, "## Log"
+  end
+
   def test_new_root_nested_via_area
     path = Trellis::Store.new_root(title: "Accounts", area: "Finances")
     assert_equal Trellis::Config.roots_dir.join("finances/accounts.md").to_s, path.to_s
     assert_equal "finances/accounts", Trellis::Arc.slug_for(path)
   end
+end
 
-  def test_capture_appends_to_root_log
+# A root states what is true now: it is edited in place, never logged to. The
+# refusal lives in Store so both interfaces inherit it.
+class RootsHaveNoLogTest < Minitest::Test
+  include VaultTest
+
+  def test_append_log_refuses_a_root
     write_root("finances")
-    Trellis::Store.capture("refinanced, new account at X", root: "finances")
-    body = Trellis::Config.roots_dir.join("finances.md").read
-    assert_includes body, "refinanced, new account at X"
+    e = assert_raises(RuntimeError) { Trellis::Store.append_log(slug: "finances", text: "refinanced") }
+    assert_match(/roots have no log/, e.message)
+    refute_includes Trellis::Config.roots_dir.join("finances.md").read, "refinanced"
+  end
+
+  def test_append_log_refuses_a_nested_root
+    write_root("finances/accounts")
+    assert_raises(RuntimeError) { Trellis::Store.append_log(slug: "finances/accounts", text: "new account") }
+  end
+
+  def test_append_log_still_appends_to_an_arc
+    write_arc("billing")
+    Trellis::Store.append_log(slug: "billing", text: "vendor confirmed")
+    assert_includes Trellis::Config.arcs_dir.join("billing.md").read, "vendor confirmed"
+  end
+
+  def test_capture_takes_no_root
+    write_root("finances")
+    assert_raises(ArgumentError) { Trellis::Store.capture("refinanced", root: "finances") }
   end
 end

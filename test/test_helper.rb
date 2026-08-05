@@ -49,7 +49,7 @@ module VaultTest
     path
   end
 
-  # Write a root file (no status, no ## Tasks). slug may contain "/" for nesting.
+  # Write a root file (no status, no ## Tasks, no ## Log). slug may contain "/" for nesting.
   def write_root(slug, title: nil, tags: [], synopsis: :unset, kind: :unset)
     fm = { "title" => (title || slug.split("/").last), "tags" => tags, "created" => "2026-01-01", "updated" => "2026-01-01" }
     fm["synopsis"] = synopsis unless synopsis == :unset
@@ -62,8 +62,6 @@ module VaultTest
       ---
 
       ## Context
-
-      ## Log
     MD
     path
   end

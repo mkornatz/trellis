@@ -21,7 +21,7 @@ The vault is made of a few kinds of nodes. Knowing which is which is most of the
 
 - **Arc** — the core unit: a durable *line of work* with a beginning and an end. Migrating billing to v2, rebuilding search, planning a move. An arc carries a lifecycle `status` (`active` → `waiting`/`paused` → `done`/`dropped`), a body of `## Context`, open `## Tasks`, and a dated `## Log`. It accumulates over weeks or months, and picking the thread back up means reading one file. Arcs are what `list`, `overview`, and `tasks` operate on.
 
-- **Root** — durable *reference or context* with no lifecycle: it accumulates but never finishes. Household finances, dietary preferences, a car's maintenance history, travel notes. A root has `## Context` and an optional `## Log`, but **no tasks and no status** — if a root ever needs an actionable task, that work has become an arc. Roots are the ground some arcs grow from and others never touch. They don't appear in `list`; you reach them through `search`, a direct `root <slug>` read, or a `[[link]]` from an arc. Roots may nest in subfolders (`roots/finances/accounts.md`).
+- **Root** — durable *reference or context* with no lifecycle: it accumulates but never finishes. Household finances, dietary preferences, a car's maintenance history, travel notes. A root has `## Context` and **no tasks, no status, and no log** — it states what is true *now*, so it is edited in place and git keeps the history; if a root ever needs an actionable task, that work has become an arc. Roots are the ground some arcs grow from and others never touch. They don't appear in `list`; you reach them through `search`, a direct `root <slug>` read, or a `[[link]]` from an arc. Roots may nest in subfolders (`roots/finances/accounts.md`).
 
   *Arc vs root, in one line:* an arc is a thread you'll finish; a root is a place you keep coming back to.
 
@@ -61,11 +61,10 @@ trellis init                        # create vault dirs, build the index, wire p
 trellis new "Migrate billing to v2" --area billing --tags infra
 trellis new "Household finances" --kind roots --area home   # a root: durable reference, no lifecycle
 trellis arc billing                 # rehydrate: context, open tasks, recent log, links, backlinks
-trellis root home/household-finances   # rehydrate a root: context, log, links, backlinks
+trellis root home/household-finances   # rehydrate a root: context, links, backlinks
 trellis list                        # arcs, ordered review → priority → status → recency
 trellis overview                    # quick glance: each arc's synopsis + status (+ review reason)
-trellis capture "Decided to cut over region by region" --arc billing
-trellis capture "Refinanced, new account at X" --root home/household-finances
+trellis capture "Decided to cut over region by region" --arc billing   # roots take no log: edit theirs in place
 trellis add-task billing "Draft cutover plan @due(2026-07-20)"
 trellis tasks                       # open tasks across active arcs
 trellis search "cutover"
@@ -73,7 +72,7 @@ trellis related billing             # arcs sharing links, people, or systems
 trellis priority billing on         # flag as focus; floats to the top of `list`
 trellis pin billing on              # pin an arc/root into pinned.md (loads every session)
 trellis review                      # decision inbox: arcs flagged for a look
-trellis doctor                      # report drift between vault and index
+trellis doctor                      # report drift: vault↔index, dangling links, roots carrying a log
 ```
 
 Run `trellis help` for the full command list.
@@ -90,7 +89,7 @@ starts a stdio MCP server that exposes the same operations as tools (`trellis_ar
 
 ```
 arcs/<area>-<slug>.md   durable work: frontmatter + ## Context / ## Tasks / ## Log
-roots/<slug>.md         durable reference/context: no lifecycle (## Context / ## Log); may nest
+roots/<slug>.md         durable reference/context: no lifecycle, no log (## Context only); may nest
 artifacts/<slug>.md     long-form docs (plans, RFCs), linked from arcs
 daily/, inbox/          append-only activity log and unrouted captures
 people/, systems/       graph nodes referenced via [[links]]

@@ -22,7 +22,7 @@ Markdown vault (~/trellis)  ──parse──▶  Arc  ──index──▶  SQL
 - **`git.rb`** — commits the vault on each write so state is never more than one action from safe.
 - **`config.rb`** — vault paths + the graph vocabulary (`node_dirs`: arcs, roots, artifacts).
 
-**Arcs vs roots.** Arcs are time-bound threads of work with a start and an end (they progress through a lifecycle and complete). Roots are durable ground some arcs grow from and others never touch — reference/context that accumulates but never "finishes" (finances, prefs, a car's history). Roots share the arcs table via a `kind` column (arc|root) but carry no status, tasks, priority, or review; they surface through `search`, `trellis root <slug>`, `trellis roots`, and `[[links]]`, not through `list`. People and systems are just roots — reference nodes carrying a user-driven `entity_kind` facet (frontmatter `kind:` = system|person|principle|…), orthogonal to arc|root; filter with `trellis roots --kind <k>`.
+**Arcs vs roots.** Arcs are time-bound threads of work with a start and an end (they progress through a lifecycle and complete). Roots are durable ground some arcs grow from and others never touch — reference/context that accumulates but never "finishes" (finances, prefs, a car's history). Roots share the arcs table via a `kind` column (arc|root) but carry no status, tasks, priority, review, or **log**; they surface through `search`, `trellis root <slug>`, `trellis roots`, and `[[links]]`, not through `list`. People and systems are just roots — reference nodes carrying a user-driven `entity_kind` facet (frontmatter `kind:` = system|person|principle|…), orthogonal to arc|root; filter with `trellis roots --kind <k>`.
 - **`cli.rb`** (Thor, human) and **`mcp_server.rb`** (agents, stdio) are thin shells over `Store`/`Index`/`Arc`.
 
 ## Invariants
@@ -34,13 +34,14 @@ These protect the design. Preserve them; if a task seems to require breaking one
 3. **Every write commits git, and the app authors the message** from action + slug + `Git.summarize` — callers never pass commit text.
 4. **`[[links]]` are the graph.** Each link becomes an edge whose `kind` is its leading path segment (`arcs/`, `roots/`, `artifacts/`, else `other` — a bare `[[slug]]`, e.g. a link to a reference node, resolves by basename). Links inside code spans or fenced blocks are prose about syntax, not edges. Graph features build on the `edges` table, not on prose scanning.
 5. **Priority, needs-review, and pinned are binary flags,** orthogonal to lifecycle status and to each other. `list` ordering is `review → priority → status → recency`; no manual ranking or numeric scores. `needs_review` is the top tier so a done/paused arc with a fresh signal still surfaces (the "reopen?" case); the check-in watcher sets it, the human clears it. `pinned` renders an entity into `pinned.md` (a derived digest imported into `~/.claude/CLAUDE.md`, so pinned context loads every session); keep the pinned set small — the file has a hard line budget.
-6. **One core, two interfaces.** Behavior lives in `Store`/`Index`/`Arc` so CLI and MCP stay in lockstep. Don't put logic in a Thor command or MCP tool the other can't reach.
+6. **Roots have no log.** A root states what is true *now* — a correction edits `## Context` in place and git keeps the history; a log would only bury the current answer under its own past. `Store.append_log` refuses a root slug and `capture` has no root route; keep that refusal in `Store` so neither interface can bypass it.
+7. **One core, two interfaces.** Behavior lives in `Store`/`Index`/`Arc` so CLI and MCP stay in lockstep. Don't put logic in a Thor command or MCP tool the other can't reach.
 
 ## Vault layout (`~/trellis`)
 
 ```
 arcs/<area>-<slug>.md   durable work — frontmatter + ## Context / ## Tasks / ## Log
-roots/<slug>.md         durable reference/context — no lifecycle (## Context / ## Log); may nest in subfolders; people/systems/principles live here, typed by frontmatter kind:
+roots/<slug>.md         durable reference/context — no lifecycle, no log (## Context only, edited in place); may nest in subfolders; people/systems/principles live here, typed by frontmatter kind:
 artifacts/YYYY/MM/<slug>.md  long-form docs (plans, RFCs); sharded by first-added month; FTS-only, linked from arcs
 artifacts/YYYY/MM/<slug>.html|pdf|…  non-Markdown artifacts (mockups, decks); link-resolvable and searchable by NAME, never parsed
 daily/, inbox/          append-only activity log and unrouted captures
@@ -54,6 +55,6 @@ Arc frontmatter: `title, status (active|waiting|paused|done|dropped), tags, sour
 
 - Ruby **3.4.7** (`.ruby-version`).
 - `rake` runs the tests. Each test points `TRELLIS_VAULT` at a tmpdir, so the real vault is never touched — keep that isolation.
-- `bin/trellis mcp` starts the stdio server agents connect to; `bin/trellis doctor` reports vault↔index drift (dangling `[[links]]`, frontmatter errors) — run it after changing parsing or indexing.
+- `bin/trellis mcp` starts the stdio server agents connect to; `bin/trellis doctor` reports vault↔index drift (dangling `[[links]]`, frontmatter errors, roots carrying a `## Log`) — run it after changing parsing or indexing.
 - Adding an operation usually spans all four layers: a `Store` write, an `Index` change if it's queryable, a CLI command, and an MCP tool — reindex the touched arc, then `Git.commit`.
 - `skill/` holds the canonical `trellis` agent skill (`SKILL.md` + `checkin.md`); it's symlinked into `~/.claude/skills/trellis` so agents load it from any repo (`ln -s "$PWD/skill" ~/.claude/skills/trellis`). Edit it here, not there. Keep it in sync when CLI/MCP surface changes.
