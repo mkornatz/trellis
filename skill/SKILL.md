@@ -19,7 +19,7 @@ Markdown vault (`~/trellis/`, override `TRELLIS_VAULT`) is the source of truth; 
 
 ## The graph
 
-`[[links]]` are edges. Bare `[[snowflake]]` resolves by basename (use for roots); path-qualified `[[arcs/search-rebuild]]`, `[[artifacts/2026/07/06-…]]` classify the edge by leading segment. `trellis related <slug>` walks it; rehydrating a node surfaces its links + backlinks. Missing target → create the node so `doctor` stays clean.
+`[[links]]` are edges. Bare `[[snowflake]]` resolves by basename (use for roots); path-qualified `[[arcs/search-rebuild]]`, `[[artifacts/2026/07/06-…]]` classify the edge by leading segment. `trellis related <slug>` walks it; rehydrating a node surfaces its links + backlinks. Missing target → create the node so `doctor` stays clean. Writing *about* link syntax → wrap it in backticks or a fence; code spans and fenced blocks are skipped, so they never become edges.
 
 ## Flags — three binary switches, orthogonal to status and each other (none bump `updated`)
 

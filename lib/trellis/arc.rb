@@ -7,6 +7,8 @@ module Trellis
     SECTION_RE = /^##\s+(.+?)\s*$/
     TASK_RE    = /^\s*-\s*\[( |x|X)\]\s+(.*)$/
     LINK_RE    = /\[\[([^\]]+)\]\]/
+    FENCE_RE   = /^[ \t]*(`{3,}|~{3,})[^\n]*\n.*?(?:^[ \t]*\1[ \t]*$|\z)/m
+    CODE_SPAN_RE = /(`+)(?:(?!\1)[\s\S])*?\1/
     DUE_RE     = /@due\((\d{4}-\d{2}-\d{2})\)/
     WAIT_RE    = /@waiting\(([^)]*)\)/
 
@@ -86,13 +88,16 @@ module Trellis
       end
     end
 
-    # Every [[link]] anywhere in the body becomes an edge. kind = leading path segment.
+    # Every [[link]] in the body becomes an edge. kind = leading path segment.
+    # Code spans and fenced blocks are excluded — there, `[[x]]` is prose about syntax.
     def links
-      @body.scan(LINK_RE).flatten.uniq.map do |target|
+      linkable_body.scan(LINK_RE).flatten.uniq.map do |target|
         kind = target.include?("/") ? target.split("/").first : "other"
         { target: target, kind: kind }
       end
     end
+
+    def linkable_body = @body.gsub(FENCE_RE, "").gsub(CODE_SPAN_RE, "")
 
     def tasks
       out = []

@@ -77,6 +77,44 @@ class ArcTest < Minitest::Test
   end
 end
 
+# [[links]] are the graph, but a link inside a code span or fence is prose about
+# syntax — writing "don't use [[x]] in external docs" must not create an edge.
+class ArcLinkExtractionTest < Minitest::Test
+  include VaultTest
+
+  def targets(body) = Trellis::Arc.new(write_arc("a", body: body)).links.map { |l| l[:target] }
+
+  def test_plain_prose_link_is_an_edge
+    assert_equal ["roots/writing-voice"], targets("See [[roots/writing-voice]].")
+  end
+
+  def test_code_span_link_is_ignored
+    assert_empty targets("Don't write `[[arcs/arc-name]]` in external docs.")
+  end
+
+  def test_multi_backtick_span_link_is_ignored
+    assert_empty targets("Literally ``[[arcs/arc-name]] and a ` tick`` here.")
+  end
+
+  def test_fenced_block_link_is_ignored
+    assert_empty targets("Example:\n\n```md\n[[arcs/arc-name]]\n```\n")
+  end
+
+  def test_tilde_fence_and_unclosed_fence_links_are_ignored
+    assert_empty targets("~~~\n[[arcs/one]]\n~~~\n")
+    assert_empty targets("```\n[[arcs/two]]\n")
+  end
+
+  def test_real_link_survives_alongside_a_quoted_one
+    assert_equal ["roots/writing-voice"],
+                 targets("Use [[roots/writing-voice]], never `[[arcs/arc-name]]`.")
+  end
+
+  def test_unmatched_backtick_does_not_swallow_the_rest
+    assert_equal ["roots/writing-voice"], targets("A stray ` tick, then [[roots/writing-voice]].")
+  end
+end
+
 # latest_log returns only the newest date block, capped so a single verbose session
 # can't bloat every rehydrate; full_log returns everything. (R1)
 class LatestLogTest < Minitest::Test
