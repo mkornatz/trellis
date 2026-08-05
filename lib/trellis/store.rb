@@ -297,14 +297,22 @@ module Trellis
     def ensure_pinned_import(create: false)
       target = Config.claude_md
       return { wired: false } unless create || target.exist?
-      line = Config.pinned_import_line
       body = target.exist? ? target.read : ""
-      return { wired: false } if body.include?(line)
+      return { wired: false } if pinned_import_present?(body)
       target.dirname.mkpath
       body += "\n" unless body.empty? || body.end_with?("\n")
-      body += "#{line}\n"
+      body += "#{Config.pinned_import_line}\n"
       target.write(body)
       { wired: true }
+    end
+
+    # Compares expanded paths, so a hand-written `@~/trellis/pinned.md` counts as wired
+    # instead of being re-added as an absolute duplicate on the next write.
+    def pinned_import_present?(body)
+      want = File.expand_path(Config.pinned_import_line.delete_prefix("@"))
+      body.each_line.any? do |l|
+        (m = l.strip.match(/\A@(\S+)\z/)) && File.expand_path(m[1]) == want
+      end
     end
 
     def bump_updated(raw, date = Date.today.to_s)

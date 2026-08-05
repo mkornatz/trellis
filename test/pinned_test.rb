@@ -147,6 +147,21 @@ class PinnedImportTest < Minitest::Test
     assert_equal 1, body.scan(Trellis::Config.pinned_import_line).length
   end
 
+  def test_tilde_written_import_counts_as_wired
+    ENV["TRELLIS_PINNED_IMPORT"] = File.expand_path("~/trellis/pinned.md")
+    claude_md.write("# My config\n\n@~/trellis/pinned.md\n")
+    assert_equal({ wired: false }, Trellis::Store.ensure_pinned_import(create: false))
+    assert_equal 1, claude_md.read.scan(/pinned\.md/).length
+  ensure
+    ENV.delete("TRELLIS_PINNED_IMPORT")
+  end
+
+  def test_prose_mention_does_not_count_as_wired
+    claude_md.write("# My config\n\nsee `#{Trellis::Config.pinned_import_line}` at the bottom\n")
+    assert Trellis::Store.ensure_pinned_import(create: false)[:wired]
+    assert_equal Trellis::Config.pinned_import_line, claude_md.read.lines.last.chomp
+  end
+
   def test_regenerate_wires_when_claude_md_exists
     claude_md.write("# config\n")
     write_arc("a")
