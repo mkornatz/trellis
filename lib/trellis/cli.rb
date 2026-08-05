@@ -361,15 +361,17 @@ module Trellis
 
     desc "artifacts", "List artifacts (drafts/docs); shows which arcs link each"
     def artifacts
-      files = Config.artifacts_dir.exist? ? Config.artifacts_dir.glob("**/*.md").sort : []
-      if files.empty?
+      groups = artifact_groups
+      if groups.empty?
         say "no artifacts"
         return
       end
-      files.each do |f|
-        arc = Arc.new(f)
-        back = index.backlinks("artifacts/#{arc.slug}")
-        say "  #{arc.slug}  — #{arc.title}#{back.empty? ? '' : "  ← #{back.join(', ')}"}"
+      groups.each do |slug, files|
+        md = files.find { |f| f.extname == ".md" }
+        exts = files.reject { |f| f.extname == ".md" }.map { |f| f.extname.delete_prefix(".") }.uniq.sort
+        title = md ? Arc.new(md).title : Arc.asset_title(files.first)
+        back = index.backlinks("artifacts/#{slug}")
+        say "  #{slug}#{exts.empty? ? '' : "  [#{exts.join(',')}]"}  — #{title}#{back.empty? ? '' : "  ← #{back.join(', ')}"}"
       end
     end
 
@@ -395,8 +397,7 @@ module Trellis
 
       index.all_edges.each do |e|
         next unless Config.node_dirs.key?(e["kind"])
-        target_file = Config.vault.join("#{e['target']}.md")
-        issues << ["dangling-link", "#{e['src']} → #{e['target']}"] unless target_file.exist?
+        issues << ["dangling-link", "#{e['src']} → #{e['target']}"] if Config.node_files(e["target"]).empty?
       end
 
       if issues.empty?
@@ -418,6 +419,13 @@ module Trellis
     private
 
     def index = @index ||= Index.new
+
+    # slug => files backing it, so a doc and its .png export list as one entry.
+    def artifact_groups
+      return {} unless Config.artifacts_dir.exist?
+      files = Config.artifacts_dir.glob("**/*.md") + Config.asset_files
+      files.group_by { |f| Arc.slug_for(f) }.sort.to_h
+    end
 
     def review_inbox
       rows = index.review_arcs

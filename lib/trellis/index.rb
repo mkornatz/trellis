@@ -128,6 +128,7 @@ module Trellis
       # (like roots). Nested slugs stay unique via Arc.slug_for (path-relative).
       if Config.artifacts_dir.exist?
         Config.artifacts_dir.glob("**/*.md").sort.each { |f| index_artifact(Arc.new(f)) }
+        Config.asset_files.each { |f| index_asset(f) }
       end
       counts
     end
@@ -160,6 +161,17 @@ module Trellis
       return unless @fts
       @db.execute("DELETE FROM artifacts_fts WHERE slug = ?", [artifact.slug])
       @db.execute("INSERT INTO artifacts_fts(slug,title,body,tags) VALUES (?,?,?,?)", [artifact.slug, artifact.title, artifact.body, artifact.tags.join(" ")])
+    end
+
+    # Non-Markdown artifacts are indexed by name and extension only, never by content:
+    # empty body = asset, which is how search labels them. A Markdown file owning the
+    # same slug wins, so a doc plus its .png export stays one entry.
+    def index_asset(path)
+      return unless @fts
+      slug = Arc.slug_for(path)
+      return if @db.get_first_value("SELECT 1 FROM artifacts_fts WHERE slug = ?", [slug])
+      @db.execute("INSERT INTO artifacts_fts(slug,title,body,tags) VALUES (?,?,'',?)",
+                  [slug, Arc.asset_title(path), path.extname.delete_prefix(".")])
     end
 
     def remove(slug)
@@ -296,11 +308,12 @@ module Trellis
         out << { type: (r["kind"] == "root" ? "root" : "arc"), kind: r["entity_kind"], slug: r["slug"], title: r["title"], snip: r["snip"] }
       end
       @db.execute(<<~SQL, [query, limit]).each do |r|
-        SELECT slug, title, snippet(artifacts_fts, 2, '', '', '…', 10) AS snip
+        SELECT slug, title, snippet(artifacts_fts, 2, '', '', '…', 10) AS snip,
+               CASE WHEN body = '' THEN tags ELSE '' END AS asset_ext
         FROM artifacts_fts WHERE artifacts_fts MATCH ?
         ORDER BY bm25(artifacts_fts) LIMIT ?
       SQL
-        out << { type: "artifact", slug: r["slug"], title: r["title"], snip: r["snip"] }
+        out << { type: "artifact", kind: r["asset_ext"], slug: r["slug"], title: r["title"], snip: r["snip"] }
       end
       out
     rescue SQLite3::SQLException

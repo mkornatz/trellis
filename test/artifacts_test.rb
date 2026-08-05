@@ -33,6 +33,62 @@ class ArtifactsTest < Minitest::Test
     assert_equal 2, c[:artifacts]
   end
 
+  # A non-Markdown artifact (mockup, deck, PDF) is a real node: it resolves as a link
+  # target and is searchable by NAME. Content is never parsed.
+  def write_asset(rel, content: "<html>secret sauce</html>")
+    path = Trellis::Config.artifacts_dir.join(rel)
+    path.dirname.mkpath
+    path.write(content)
+    path
+  end
+
+  def test_asset_resolves_as_a_link_target
+    write_asset("2026/07/21-tempo-stack-story.html")
+    assert_equal ["2026/07/21-tempo-stack-story.html"],
+                 Trellis::Config.node_files("artifacts/2026/07/21-tempo-stack-story").map { |f| f.relative_path_from(Trellis::Config.artifacts_dir).to_s }
+  end
+
+  def test_missing_target_still_resolves_to_nothing
+    assert_empty Trellis::Config.node_files("artifacts/2026/07/nope")
+  end
+
+  def test_markdown_wins_when_both_extensions_exist
+    write_artifact("2026/07/deck", title: "Deck")
+    write_asset("2026/07/deck.html")
+    assert_equal [".md"], Trellis::Config.node_files("artifacts/2026/07/deck").map(&:extname)
+  end
+
+  def test_asset_is_searchable_by_name_not_content
+    write_asset("2026/07/21-tempo-stack-story.html")
+    index.reindex_all
+    skip "FTS unavailable" unless index.fts?
+    hit = index.search("tempo stack").find { |r| r[:slug] == "2026/07/21-tempo-stack-story" }
+    refute_nil hit, "asset must be findable by name"
+    assert_equal "artifact", hit[:type]
+    assert_equal "html", hit[:kind]
+    assert_equal "Tempo stack story", hit[:title]
+    assert_empty index.search("secret sauce"), "asset content must not be indexed"
+  end
+
+  def test_asset_title_strips_day_prefix
+    assert_equal "Tempo stack story", Trellis::Arc.asset_title("2026/07/21-tempo-stack-story.html")
+    assert_equal "BNY sol rewards", Trellis::Arc.asset_title("27-BNY-sol-rewards.pdf")
+  end
+
+  def test_sibling_export_does_not_double_index
+    write_asset("2026/07/08-diagram.html")
+    write_asset("2026/07/08-diagram.png", content: "binary-ish")
+    c = index.reindex_all
+    skip "FTS unavailable" unless index.fts?
+    assert_equal 1, c[:artifacts]
+  end
+
+  def test_hidden_files_are_not_artifacts
+    write_asset(".DS_Store")
+    write_asset(".obsidian/workspace.json")
+    assert_empty Trellis::Config.asset_files
+  end
+
   def test_arc_links_nested_artifact_via_full_path
     write_artifact("2026/03/plan", title: "Plan")
     path = Trellis::Config.arcs_dir.join("billing.md")

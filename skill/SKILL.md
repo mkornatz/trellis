@@ -19,7 +19,7 @@ Markdown vault (`~/trellis/`, override `TRELLIS_VAULT`) is the source of truth; 
 
 ## The graph
 
-`[[links]]` are edges. Bare `[[snowflake]]` resolves by basename (use for roots); path-qualified `[[arcs/search-rebuild]]`, `[[artifacts/2026/07/06-…]]` classify the edge by leading segment. `trellis related <slug>` walks it; rehydrating a node surfaces its links + backlinks. Missing target → create the node so `doctor` stays clean. Writing *about* link syntax → wrap it in backticks or a fence; code spans and fenced blocks are skipped, so they never become edges.
+`[[links]]` are edges. Bare `[[snowflake]]` resolves by basename (use for roots); path-qualified `[[arcs/search-rebuild]]`, `[[artifacts/2026/07/06-…]]` classify the edge by leading segment. `trellis related <slug>` walks it; rehydrating a node surfaces its links + backlinks. Missing target → create the node so `doctor` stays clean (`doctor` resolves any extension, so a link to an `.html` mockup is not missing — check before creating). Writing *about* link syntax → wrap it in backticks or a fence; code spans and fenced blocks are skipped, so they never become edges.
 
 ## Flags — three binary switches, orthogonal to status and each other (none bump `updated`)
 
@@ -95,6 +95,8 @@ For the heavy case — an arc whose `## Log` has outgrown its `## Context` — u
 ## Artifacts
 
 Long-form docs (RFCs, plans, research, handoffs) live in `~/trellis/artifacts/YYYY/MM/DD-<title>.md`, sharded by *creation* month (never moves). Link from an arc with `[[artifacts/YYYY/MM/DD-<title>]]`; **don't paste long docs into `## Context`** (it breaks the terse rehydration capsule). `search` covers their content; rehydrating an arc surfaces linked artifacts. Read/write as plain files by absolute path.
+
+Non-Markdown artifacts (`.html` mockups and decks, `.pdf`, `.png`, scripts) sit in the same folders and are real link targets — `[[artifacts/2026/07/21-tempo-stack-story]]` resolves to the `.html`. They're **searchable by name only**; trellis never parses their bytes, so `search` won't match anything inside. `trellis artifacts` tags them with their extension. Want the contents findable → write a short companion `.md` beside it saying what it is and why it matters.
 
 ## Check-in
 

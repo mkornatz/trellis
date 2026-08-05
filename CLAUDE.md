@@ -42,6 +42,7 @@ These protect the design. Preserve them; if a task seems to require breaking one
 arcs/<area>-<slug>.md   durable work — frontmatter + ## Context / ## Tasks / ## Log
 roots/<slug>.md         durable reference/context — no lifecycle (## Context / ## Log); may nest in subfolders; people/systems/principles live here, typed by frontmatter kind:
 artifacts/YYYY/MM/<slug>.md  long-form docs (plans, RFCs); sharded by first-added month; FTS-only, linked from arcs
+artifacts/YYYY/MM/<slug>.html|pdf|…  non-Markdown artifacts (mockups, decks); link-resolvable and searchable by NAME, never parsed
 daily/, inbox/          append-only activity log and unrouted captures
 pinned.md               derived digest of pinned arcs/roots, imported into ~/.claude/CLAUDE.md
 .trellis/index.db       derived index (gitignored in the vault)

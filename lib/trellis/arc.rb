@@ -57,6 +57,12 @@ module Trellis
       nil
     end
 
+    # Display name for a non-Markdown artifact, derived from the filename alone —
+    # the day prefix is sharding, not part of the name.
+    def self.asset_title(path)
+      Pathname.new(path).basename(".*").to_s.sub(/\A\d{1,2}-/, "").tr("-", " ").sub(/\A./, &:upcase)
+    end
+
     # Node kind by directory. Only arc vs root matters (both live in the arcs
     # table); roots carry no lifecycle (status/priority/review).
     def node_kind = self.class.relative_within(@path, Config.roots_dir) ? "root" : "arc"
